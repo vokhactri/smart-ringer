@@ -12,14 +12,17 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -33,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -55,20 +59,44 @@ fun SmartRingerApp(viewModel: MainViewModel) {
     var permissionSetupDismissed by rememberSaveable { mutableStateOf(false) }
     var notificationRequested by rememberSaveable { mutableStateOf(false) }
     var backProgress by remember { mutableFloatStateOf(0f) }
+    var backSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
 
     fun navigateHome() {
         screen = AppScreen.HOME
         editorSchedule = null
     }
 
+    val homeContent: @Composable () -> Unit = {
+        HomeScreen(
+            schedules = schedules,
+            timer = timer,
+            settings = settings,
+            systemAccess = access,
+            onAdd = { showAddChoice = true },
+            onEdit = {
+                editorSchedule = it
+                screen = AppScreen.SCHEDULE_EDITOR
+            },
+            onToggle = viewModel::toggle,
+            onDelete = viewModel::delete,
+            onCancelTimer = viewModel::cancelTimer,
+            onToggleAutomation = viewModel::setAutomationEnabled,
+            onSettings = { screen = AppScreen.SETTINGS },
+        )
+    }
+
     PredictiveBackHandler(enabled = screen != AppScreen.HOME) { progress ->
         try {
-            progress.collect { backProgress = it.progress }
+            progress.collect { backEvent ->
+                backProgress = backEvent.progress
+                backSwipeEdge = backEvent.swipeEdge
+            }
             navigateHome()
             backProgress = 0f
-        } catch (_: CancellationException) {
+        } catch (cancellation: CancellationException) {
             // A cancelled back gesture must leave the current screen intact.
             backProgress = 0f
+            throw cancellation
         }
     }
 
@@ -79,58 +107,54 @@ fun SmartRingerApp(viewModel: MainViewModel) {
         }
     }
 
-    Surface(
-        Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                translationX = size.width * backProgress * 0.08f
-                scaleX = 1f - backProgress * 0.02f
-                scaleY = 1f - backProgress * 0.02f
-                alpha = 1f - backProgress * 0.08f
-            },
-    ) {
-        when (screen) {
-            AppScreen.HOME -> HomeScreen(
-                schedules = schedules,
-                timer = timer,
-                settings = settings,
-                systemAccess = access,
-                onAdd = { showAddChoice = true },
-                onEdit = {
-                    editorSchedule = it
-                    screen = AppScreen.SCHEDULE_EDITOR
+    Box(Modifier.fillMaxSize()) {
+        if (screen != AppScreen.HOME) {
+            Surface(Modifier.fillMaxSize()) { homeContent() }
+        }
+
+        Surface(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    if (screen != AppScreen.HOME) {
+                        val direction = if (backSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
+                        translationX = size.width * backProgress * 0.06f * direction
+                        scaleX = 1f - backProgress * 0.1f
+                        scaleY = 1f - backProgress * 0.1f
+                        shape = RoundedCornerShape(28.dp * backProgress)
+                        clip = backProgress > 0f
+                        shadowElevation = 12.dp.toPx() * backProgress
+                    }
                 },
-                onToggle = viewModel::toggle,
-                onDelete = viewModel::delete,
-                onCancelTimer = viewModel::cancelTimer,
-                onToggleAutomation = viewModel::setAutomationEnabled,
-                onSettings = { screen = AppScreen.SETTINGS },
-            )
-            AppScreen.SCHEDULE_EDITOR -> ScheduleEditorScreen(
-                existing = editorSchedule,
-                use24HourTime = settings.use24HourTime,
-                systemAccess = access,
-                onBack = ::navigateHome,
-                onSave = {
-                    viewModel.save(it)
-                    navigateHome()
-                },
-            )
-            AppScreen.TIMER -> TimerScreen(
-                systemAccess = access,
-                onBack = ::navigateHome,
-                onStart = { duration, mode ->
-                    viewModel.startTimer(duration, mode)
-                    navigateHome()
-                },
-            )
-            AppScreen.SETTINGS -> SettingsScreen(
-                settings = settings,
-                systemAccess = access,
-                onBack = ::navigateHome,
-                onAutomationEnabled = viewModel::setAutomationEnabled,
-                onUse24HourTime = viewModel::setUse24HourTime,
-            )
+        ) {
+            when (screen) {
+                AppScreen.HOME -> homeContent()
+                AppScreen.SCHEDULE_EDITOR -> ScheduleEditorScreen(
+                    existing = editorSchedule,
+                    use24HourTime = settings.use24HourTime,
+                    systemAccess = access,
+                    onBack = ::navigateHome,
+                    onSave = {
+                        viewModel.save(it)
+                        navigateHome()
+                    },
+                )
+                AppScreen.TIMER -> TimerScreen(
+                    systemAccess = access,
+                    onBack = ::navigateHome,
+                    onStart = { duration, mode ->
+                        viewModel.startTimer(duration, mode)
+                        navigateHome()
+                    },
+                )
+                AppScreen.SETTINGS -> SettingsScreen(
+                    settings = settings,
+                    systemAccess = access,
+                    onBack = ::navigateHome,
+                    onAutomationEnabled = viewModel::setAutomationEnabled,
+                    onUse24HourTime = viewModel::setUse24HourTime,
+                )
+            }
         }
     }
 
@@ -221,7 +245,7 @@ internal fun rememberSystemAccess(): SystemAccess {
                 activity?.getSystemService(StatusBarManager::class.java)?.requestAddTileService(
                     ComponentName(context, AutomationTileService::class.java),
                     "Smart Ringer",
-                    Icon.createWithResource(context, R.drawable.ic_notification),
+                    Icon.createWithResource(context, R.drawable.ic_qs_tile),
                     context.mainExecutor,
                 ) { }
             }
