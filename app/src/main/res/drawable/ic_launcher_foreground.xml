@@ -4,32 +4,38 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Clock and sound waves share one centered 60dp visual footprint. -->
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M70,45 C76,50 76,58 70,63"
-        android:strokeColor="#FFBC57"
-        android:strokeLineCap="round"
-        android:strokeWidth="4" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M79,39 C89,47 89,61 79,69"
-        android:strokeColor="#FFBC57"
-        android:strokeLineCap="round"
-        android:strokeWidth="4" />
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.86"
+        android:scaleY="0.86">
+        <!-- Clock and sound waves share one centered 60dp visual footprint. -->
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M70,45 C76,50 76,58 70,63"
+            android:strokeColor="#FFBC57"
+            android:strokeLineCap="round"
+            android:strokeWidth="4" />
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M79,39 C89,47 89,61 79,69"
+            android:strokeColor="#FFBC57"
+            android:strokeLineCap="round"
+            android:strokeWidth="4" />
 
-    <!-- The clock communicates that ringer changes are scheduled. -->
-    <path
-        android:fillColor="#F7F2FF"
-        android:pathData="M42,32 A22,22 0,1 1,42,76 A22,22 0,1 1,42,32" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M42,40 L42,54 L52,60"
-        android:strokeColor="#211A3A"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="4.5" />
-    <path
-        android:fillColor="#FFBC57"
-        android:pathData="M42,50 A4,4 0,1 1,42,58 A4,4 0,1 1,42,50" />
+        <!-- The clock communicates that ringer changes are scheduled. -->
+        <path
+            android:fillColor="#F7F2FF"
+            android:pathData="M42,32 A22,22 0,1 1,42,76 A22,22 0,1 1,42,32" />
+        <path
+            android:fillColor="@android:color/transparent"
+            android:pathData="M42,40 L42,54 L52,60"
+            android:strokeColor="#211A3A"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="4.5" />
+        <path
+            android:fillColor="#FFBC57"
+            android:pathData="M42,50 A4,4 0,1 1,42,58 A4,4 0,1 1,42,50" />
+    </group>
 </vector>
