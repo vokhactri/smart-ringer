@@ -1,6 +1,7 @@
 package dev.trivk.smartringer.model
 
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalTime
 import java.util.UUID
 
@@ -20,3 +21,16 @@ data class RingerSchedule(
     val enabled: Boolean = true,
 )
 
+data class RingerTimer(
+    val id: String = UUID.randomUUID().toString(),
+    val mode: RingerMode,
+    val startedAtMillis: Long,
+    val endsAtMillis: Long,
+) {
+    val duration: Duration get() = Duration.ofMillis(endsAtMillis - startedAtMillis)
+}
+
+data class AppSettings(
+    val automationEnabled: Boolean = true,
+    val use24HourTime: Boolean = false,
+)

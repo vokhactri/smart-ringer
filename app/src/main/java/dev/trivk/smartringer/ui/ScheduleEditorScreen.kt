@@ -55,8 +55,10 @@ import java.time.format.FormatStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleEditorScreen(
+internal fun ScheduleEditorScreen(
     existing: RingerSchedule?,
+    use24HourTime: Boolean,
+    systemAccess: SystemAccess,
     onBack: () -> Unit,
     onSave: (RingerSchedule) -> Unit,
 ) {
@@ -66,7 +68,7 @@ fun ScheduleEditorScreen(
     var startTime by remember(existing?.id) { mutableStateOf(existing?.startTime ?: LocalTime.of(9, 0)) }
     var endTime by remember(existing?.id) { mutableStateOf(existing?.endTime ?: LocalTime.of(17, 0)) }
     var editingTime by remember { mutableStateOf<TimeField?>(null) }
-    val access = rememberSystemAccess()
+    val access = systemAccess
     val valid = name.isNotBlank() && days.isNotEmpty() && startTime != endTime &&
         (mode == RingerMode.VIBRATE || access.dndGranted)
 
@@ -141,12 +143,12 @@ fun ScheduleEditorScreen(
             }
             item {
                 Section(title = "Start time") {
-                    TimeButton(startTime) { editingTime = TimeField.START }
+                    TimeButton(startTime, use24HourTime) { editingTime = TimeField.START }
                 }
             }
             item {
                 Section(title = "End time") {
-                    TimeButton(endTime) { editingTime = TimeField.END }
+                    TimeButton(endTime, use24HourTime) { editingTime = TimeField.END }
                     if (startTime == endTime) {
                         Text(
                             "Start and end times must be different.",
@@ -188,6 +190,7 @@ fun ScheduleEditorScreen(
         TimePickerDialog(
             title = if (field == TimeField.START) "Start time" else "End time",
             initial = current,
+            use24HourTime = use24HourTime,
             onDismiss = { editingTime = null },
             onConfirm = {
                 if (field == TimeField.START) startTime = it else endTime = it
@@ -300,7 +303,7 @@ private fun ModeCard(
 }
 
 @Composable
-private fun TimeButton(time: LocalTime, onClick: () -> Unit) {
+private fun TimeButton(time: LocalTime, use24HourTime: Boolean, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
         modifier = Modifier
@@ -309,7 +312,7 @@ private fun TimeButton(time: LocalTime, onClick: () -> Unit) {
         shape = RoundedCornerShape(20.dp),
     ) {
         Text(
-            time.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)),
+            time.format(if (use24HourTime) DateTimeFormatter.ofPattern("HH:mm") else DateTimeFormatter.ofPattern("h:mm a")),
             style = MaterialTheme.typography.headlineMedium,
         )
     }
@@ -334,13 +337,14 @@ private fun AccessPrompt(text: String, onClick: () -> Unit) {
 private fun TimePickerDialog(
     title: String,
     initial: LocalTime,
+    use24HourTime: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (LocalTime) -> Unit,
 ) {
     val state = rememberTimePickerState(
         initialHour = initial.hour,
         initialMinute = initial.minute,
-        is24Hour = false,
+        is24Hour = use24HourTime,
     )
     AlertDialog(
         onDismissRequest = onDismiss,

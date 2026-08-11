@@ -47,6 +47,17 @@ class ScheduleTimingTest {
         )
     }
 
+    @Test
+    fun `overnight end is still scheduled after reboot past midnight`() {
+        val schedule = schedule(start = "22:00", end = "07:00", days = setOf(DayOfWeek.MONDAY))
+        val now = dateTime("2026-08-11T02:00:00")
+
+        assertEquals(
+            dateTime("2026-08-11T07:00:00"),
+            ScheduleTiming.nextBoundary(schedule, Boundary.END, now),
+        )
+    }
+
     private fun schedule(start: String, end: String, days: Set<DayOfWeek>) = RingerSchedule(
         name = "Test",
         days = days,

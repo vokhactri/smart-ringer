@@ -10,7 +10,7 @@ internal object ScheduleTiming {
         schedule: RingerSchedule,
         boundary: Boundary,
         now: ZonedDateTime,
-    ): ZonedDateTime? = (0..8)
+    ): ZonedDateTime? = (if (boundary == Boundary.END) -1..8 else 0..8)
         .asSequence()
         .map { now.toLocalDate().plusDays(it.toLong()) }
         .filter { it.dayOfWeek in schedule.days }
@@ -41,4 +41,3 @@ internal object ScheduleTiming {
             }
             .maxOrNull()
 }
-

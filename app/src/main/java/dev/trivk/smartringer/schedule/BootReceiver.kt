@@ -3,16 +3,11 @@ package dev.trivk.smartringer.schedule
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import dev.trivk.smartringer.data.ScheduleRepository
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in supportedActions) return
-        val schedules = ScheduleRepository(context).load()
-        RingerScheduler(context).run {
-            applyCurrentState(schedules)
-            rescheduleAll(schedules)
-        }
+        RingerScheduler(context).reconcile(TriggerReason.BOOT)
     }
 
     private companion object {
@@ -21,6 +16,7 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIMEZONE_CHANGED,
             Intent.ACTION_TIME_CHANGED,
+            "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED",
         )
     }
 }

@@ -3,15 +3,12 @@ package dev.trivk.smartringer.schedule
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import dev.trivk.smartringer.data.ScheduleRepository
 
 class RingerAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val schedules = ScheduleRepository(context).load()
-        RingerScheduler(context).run {
-            applyCurrentState(schedules)
-            rescheduleAll(schedules)
-        }
+        val validAction = intent.action == RingerScheduler.ACTION_TIMER_END ||
+            intent.action?.startsWith("dev.trivk.smartringer.SCHEDULE_") == true
+        if (!validAction) return
+        RingerScheduler(context).reconcile(TriggerReason.ALARM)
     }
 }
-
