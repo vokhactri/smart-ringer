@@ -4,6 +4,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val signingStoreFile = providers.environmentVariable("SIGNING_STORE_FILE")
+val signingStorePassword = providers.environmentVariable("SIGNING_STORE_PASSWORD")
+val signingKeyAlias = providers.environmentVariable("SIGNING_KEY_ALIAS")
+val signingKeyPassword = providers.environmentVariable("SIGNING_KEY_PASSWORD")
+
 android {
     namespace = "dev.trivk.smartringer"
     compileSdk = 35
@@ -12,8 +17,8 @@ android {
         applicationId = "dev.trivk.smartringer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toInt() ?: 1
+        versionName = providers.environmentVariable("VERSION_NAME").orNull?.removePrefix("v") ?: "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -26,9 +31,21 @@ android {
 
     packaging.resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
 
+    signingConfigs {
+        if (signingStoreFile.isPresent) {
+            create("release") {
+                storeFile = file(signingStoreFile.get())
+                storePassword = signingStorePassword.get()
+                keyAlias = signingKeyAlias.get()
+                keyPassword = signingKeyPassword.get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -59,4 +76,3 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 }
-
