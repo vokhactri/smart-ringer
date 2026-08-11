@@ -17,8 +17,8 @@ android {
         applicationId = "dev.trivk.smartringer"
         minSdk = 26
         targetSdk = 35
-        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toInt() ?: 2
-        versionName = providers.environmentVariable("VERSION_NAME").orNull?.removePrefix("v") ?: "1.1.0"
+        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toInt() ?: 3
+        versionName = providers.environmentVariable("VERSION_NAME").orNull?.removePrefix("v") ?: "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
