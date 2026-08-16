@@ -15,15 +15,11 @@ import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -116,8 +112,18 @@ fun SmartRingerApp(viewModel: MainViewModel) {
                 backProgress.snapTo(backEvent.progress)
                 backSwipeEdge = backEvent.swipeEdge
             }
+            val completedInteractively = visibleProgressEvents >= MinPredictiveProgressEvents
+            if (completedInteractively) {
+                backProgress.animateTo(
+                    1f,
+                    spring(
+                        dampingRatio = NavigationSpringDampingRatio,
+                        stiffness = NavigationSpringStiffness,
+                    ),
+                )
+            }
             navigateHome(
-                if (visibleProgressEvents >= MinPredictiveProgressEvents) {
+                if (completedInteractively) {
                     NavigationMotion.INSTANT
                 } else {
                     NavigationMotion.BACK
@@ -127,7 +133,13 @@ fun SmartRingerApp(viewModel: MainViewModel) {
         } catch (cancellation: CancellationException) {
             // A cancelled back gesture must leave the current screen intact.
             scope.launch {
-                backProgress.animateTo(0f, tween(durationMillis = 160, easing = LinearEasing))
+                backProgress.animateTo(
+                    0f,
+                    spring(
+                        dampingRatio = NavigationSpringDampingRatio,
+                        stiffness = NavigationSpringStiffness,
+                    ),
+                )
             }
             throw cancellation
         }
@@ -146,11 +158,9 @@ fun SmartRingerApp(viewModel: MainViewModel) {
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        val progress = backProgress.value
-                        val easedProgress = easeOutCubic(progress)
-                        scaleX = 1f + FadeThroughScaleDelta * (1f - easedProgress)
-                        scaleY = 1f + FadeThroughScaleDelta * (1f - easedProgress)
-                        alpha = (progress / FadeThroughProgress).coerceIn(0f, 1f)
+                        val progress = backProgress.value.coerceIn(0f, 1f)
+                        val direction = if (backSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
+                        translationX = -direction * size.width * BackgroundParallaxFraction * (1f - progress)
                     },
             ) { homeContent() }
         }
@@ -160,16 +170,12 @@ fun SmartRingerApp(viewModel: MainViewModel) {
                 .fillMaxSize()
                 .graphicsLayer {
                     if (screen != AppScreen.HOME) {
-                        val progress = backProgress.value
-                        val easedProgress = easeOutCubic(progress)
+                        val progress = backProgress.value.coerceIn(0f, 1f)
                         val direction = if (backSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
-                        translationX = size.width * easedProgress * 0.1f * direction
-                        scaleX = 1f - easedProgress * ExitScaleDelta
-                        scaleY = 1f - easedProgress * ExitScaleDelta
-                        alpha = 1f - (progress / FadeThroughProgress).coerceIn(0f, 1f)
-                        shape = RoundedCornerShape(28.dp * easedProgress)
+                        translationX = size.width * progress * direction
+                        shape = RoundedCornerShape(PredictiveBackCornerRadius * progress)
                         clip = progress > 0f
-                        shadowElevation = 16.dp.toPx() * easedProgress
+                        shadowElevation = PredictiveBackShadowElevation.toPx() * progress
                     }
                 },
         ) {
@@ -253,38 +259,43 @@ fun SmartRingerApp(viewModel: MainViewModel) {
 private enum class AppScreen { HOME, SCHEDULE_EDITOR, TIMER, SETTINGS }
 private enum class NavigationMotion { INSTANT, FORWARD, BACK }
 
-private const val FadeThroughProgress = 0.35f
-private const val ExitScaleDelta = 0.1f
-private const val FadeThroughScaleDelta = 0.1f
-private const val NavigationDurationMillis = 260
-private const val NavigationFadeDurationMillis = 180
+private const val BackgroundParallaxFraction = 0.2f
+private const val NavigationSpringDampingRatio = 0.85f
+private const val NavigationSpringStiffness = 550f
 private const val MinPredictiveProgressEvents = 2
+private val PredictiveBackCornerRadius = 24.dp
+private val PredictiveBackShadowElevation = 18.dp
 
 private fun navigationTransition(motion: NavigationMotion) = when (motion) {
     NavigationMotion.INSTANT -> EnterTransition.None togetherWith ExitTransition.None
     NavigationMotion.FORWARD ->
         (slideInHorizontally(
-            animationSpec = tween(NavigationDurationMillis, easing = FastOutSlowInEasing),
-            initialOffsetX = { it / 8 },
-        ) + fadeIn(tween(NavigationFadeDurationMillis))) togetherWith
-            (slideOutHorizontally(
-                animationSpec = tween(NavigationDurationMillis, easing = FastOutSlowInEasing),
-                targetOffsetX = { -it / 16 },
-            ) + fadeOut(tween(NavigationFadeDurationMillis)))
+            animationSpec = spring(
+                dampingRatio = NavigationSpringDampingRatio,
+                stiffness = NavigationSpringStiffness,
+            ),
+            initialOffsetX = { it },
+        ) togetherWith slideOutHorizontally(
+            animationSpec = spring(
+                dampingRatio = NavigationSpringDampingRatio,
+                stiffness = NavigationSpringStiffness,
+            ),
+            targetOffsetX = { -it / 5 },
+        )).apply { targetContentZIndex = 1f }
     NavigationMotion.BACK ->
         (slideInHorizontally(
-            animationSpec = tween(NavigationDurationMillis, easing = FastOutSlowInEasing),
-            initialOffsetX = { -it / 16 },
-        ) + fadeIn(tween(NavigationFadeDurationMillis))) togetherWith
-            (slideOutHorizontally(
-                animationSpec = tween(NavigationDurationMillis, easing = FastOutSlowInEasing),
-                targetOffsetX = { it / 8 },
-            ) + fadeOut(tween(NavigationFadeDurationMillis)))
-}
-
-private fun easeOutCubic(progress: Float): Float {
-    val inverse = 1f - progress
-    return 1f - inverse * inverse * inverse
+            animationSpec = spring(
+                dampingRatio = NavigationSpringDampingRatio,
+                stiffness = NavigationSpringStiffness,
+            ),
+            initialOffsetX = { -it / 5 },
+        ) togetherWith slideOutHorizontally(
+            animationSpec = spring(
+                dampingRatio = NavigationSpringDampingRatio,
+                stiffness = NavigationSpringStiffness,
+            ),
+            targetOffsetX = { it },
+        )).apply { targetContentZIndex = -1f }
 }
 
 @Composable
