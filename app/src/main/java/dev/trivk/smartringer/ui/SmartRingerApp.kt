@@ -12,7 +12,16 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.activity.BackEventCompat
@@ -64,11 +73,18 @@ fun SmartRingerApp(viewModel: MainViewModel) {
     var notificationRequested by rememberSaveable { mutableStateOf(false) }
     val backProgress = remember { Animatable(0f) }
     var backSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    var navigationMotion by remember { mutableStateOf(NavigationMotion.INSTANT) }
     val scope = rememberCoroutineScope()
 
-    fun navigateHome() {
+    fun navigateHome(motion: NavigationMotion = NavigationMotion.BACK) {
+        navigationMotion = motion
         screen = AppScreen.HOME
         editorSchedule = null
+    }
+
+    fun navigateTo(destination: AppScreen) {
+        navigationMotion = NavigationMotion.FORWARD
+        screen = destination
     }
 
     val homeContent: @Composable () -> Unit = {
@@ -80,23 +96,33 @@ fun SmartRingerApp(viewModel: MainViewModel) {
             onAdd = { showAddChoice = true },
             onEdit = {
                 editorSchedule = it
-                screen = AppScreen.SCHEDULE_EDITOR
+                navigateTo(AppScreen.SCHEDULE_EDITOR)
             },
             onToggle = viewModel::toggle,
             onDelete = viewModel::delete,
             onCancelTimer = viewModel::cancelTimer,
             onToggleAutomation = viewModel::setAutomationEnabled,
-            onSettings = { screen = AppScreen.SETTINGS },
+            onSettings = { navigateTo(AppScreen.SETTINGS) },
         )
     }
 
     PredictiveBackHandler(enabled = screen != AppScreen.HOME) { progress ->
+        var visibleProgressEvents = 0
         try {
             progress.collect { backEvent ->
+                if (backEvent.progress > 0.01f && backEvent.progress < 0.99f) {
+                    visibleProgressEvents++
+                }
                 backProgress.snapTo(backEvent.progress)
                 backSwipeEdge = backEvent.swipeEdge
             }
-            navigateHome()
+            navigateHome(
+                if (visibleProgressEvents >= MinPredictiveProgressEvents) {
+                    NavigationMotion.INSTANT
+                } else {
+                    NavigationMotion.BACK
+                },
+            )
             backProgress.snapTo(0f)
         } catch (cancellation: CancellationException) {
             // A cancelled back gesture must leave the current screen intact.
@@ -147,33 +173,39 @@ fun SmartRingerApp(viewModel: MainViewModel) {
                     }
                 },
         ) {
-            when (screen) {
-                AppScreen.HOME -> homeContent()
-                AppScreen.SCHEDULE_EDITOR -> ScheduleEditorScreen(
-                    existing = editorSchedule,
-                    use24HourTime = settings.use24HourTime,
-                    systemAccess = access,
-                    onBack = ::navigateHome,
-                    onSave = {
-                        viewModel.save(it)
-                        navigateHome()
-                    },
-                )
-                AppScreen.TIMER -> TimerScreen(
-                    systemAccess = access,
-                    onBack = ::navigateHome,
-                    onStart = { duration, mode ->
-                        viewModel.startTimer(duration, mode)
-                        navigateHome()
-                    },
-                )
-                AppScreen.SETTINGS -> SettingsScreen(
-                    settings = settings,
-                    systemAccess = access,
-                    onBack = ::navigateHome,
-                    onAutomationEnabled = viewModel::setAutomationEnabled,
-                    onUse24HourTime = viewModel::setUse24HourTime,
-                )
+            AnimatedContent(
+                targetState = screen,
+                transitionSpec = { navigationTransition(navigationMotion) },
+                label = "app navigation",
+            ) { destination ->
+                when (destination) {
+                    AppScreen.HOME -> homeContent()
+                    AppScreen.SCHEDULE_EDITOR -> ScheduleEditorScreen(
+                        existing = editorSchedule,
+                        use24HourTime = settings.use24HourTime,
+                        systemAccess = access,
+                        onBack = { navigateHome() },
+                        onSave = {
+                            viewModel.save(it)
+                            navigateHome()
+                        },
+                    )
+                    AppScreen.TIMER -> TimerScreen(
+                        systemAccess = access,
+                        onBack = { navigateHome() },
+                        onStart = { duration, mode ->
+                            viewModel.startTimer(duration, mode)
+                            navigateHome()
+                        },
+                    )
+                    AppScreen.SETTINGS -> SettingsScreen(
+                        settings = settings,
+                        systemAccess = access,
+                        onBack = { navigateHome() },
+                        onAutomationEnabled = viewModel::setAutomationEnabled,
+                        onUse24HourTime = viewModel::setUse24HourTime,
+                    )
+                }
             }
         }
     }
@@ -187,13 +219,13 @@ fun SmartRingerApp(viewModel: MainViewModel) {
                 TextButton(onClick = {
                     showAddChoice = false
                     editorSchedule = null
-                    screen = AppScreen.SCHEDULE_EDITOR
+                    navigateTo(AppScreen.SCHEDULE_EDITOR)
                 }) { Text("Schedule") }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showAddChoice = false
-                    screen = AppScreen.TIMER
+                    navigateTo(AppScreen.TIMER)
                 }) { Text("Timer") }
             },
         )
@@ -219,10 +251,36 @@ fun SmartRingerApp(viewModel: MainViewModel) {
 }
 
 private enum class AppScreen { HOME, SCHEDULE_EDITOR, TIMER, SETTINGS }
+private enum class NavigationMotion { INSTANT, FORWARD, BACK }
 
 private const val FadeThroughProgress = 0.35f
 private const val ExitScaleDelta = 0.1f
 private const val FadeThroughScaleDelta = 0.1f
+private const val NavigationDurationMillis = 260
+private const val NavigationFadeDurationMillis = 180
+private const val MinPredictiveProgressEvents = 2
+
+private fun navigationTransition(motion: NavigationMotion) = when (motion) {
+    NavigationMotion.INSTANT -> EnterTransition.None togetherWith ExitTransition.None
+    NavigationMotion.FORWARD ->
+        (slideInHorizontally(
+            animationSpec = tween(NavigationDurationMillis, easing = FastOutSlowInEasing),
+            initialOffsetX = { it / 8 },
+        ) + fadeIn(tween(NavigationFadeDurationMillis))) togetherWith
+            (slideOutHorizontally(
+                animationSpec = tween(NavigationDurationMillis, easing = FastOutSlowInEasing),
+                targetOffsetX = { -it / 16 },
+            ) + fadeOut(tween(NavigationFadeDurationMillis)))
+    NavigationMotion.BACK ->
+        (slideInHorizontally(
+            animationSpec = tween(NavigationDurationMillis, easing = FastOutSlowInEasing),
+            initialOffsetX = { -it / 16 },
+        ) + fadeIn(tween(NavigationFadeDurationMillis))) togetherWith
+            (slideOutHorizontally(
+                animationSpec = tween(NavigationDurationMillis, easing = FastOutSlowInEasing),
+                targetOffsetX = { it / 8 },
+            ) + fadeOut(tween(NavigationFadeDurationMillis)))
+}
 
 private fun easeOutCubic(progress: Float): Float {
     val inverse = 1f - progress
