@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.SmartRinger" parent="Theme.SmartRinger.Base">
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_clock</item>
+    </style>
+</resources>

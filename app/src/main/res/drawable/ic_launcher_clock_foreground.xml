@@ -9,7 +9,6 @@
         android:pivotY="54"
         android:scaleX="0.86"
         android:scaleY="0.86">
-        <!-- Clock and sound waves share one centered 60dp visual footprint. -->
         <path
             android:fillColor="@android:color/transparent"
             android:pathData="M70,45 C76,50 76,58 70,63"
@@ -22,8 +21,6 @@
             android:strokeColor="#FFBC57"
             android:strokeLineCap="round"
             android:strokeWidth="4" />
-
-        <!-- The clock communicates that ringer changes are scheduled. -->
         <path
             android:fillColor="#F7F2FF"
             android:pathData="M42,32 A22,22 0,1 1,42,76 A22,22 0,1 1,42,32" />
