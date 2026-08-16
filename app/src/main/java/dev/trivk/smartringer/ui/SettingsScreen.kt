@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
@@ -120,19 +121,41 @@ internal fun SettingsScreen(
             }
             item {
                 SettingsSection("Quick Settings") {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Smart Ringer tile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text("Toggle all automation without opening the app.")
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                TextButton(onClick = systemAccess.requestAddTile, modifier = Modifier.align(Alignment.End)) {
-                                    Text("Add tile")
-                                }
-                            } else {
-                                Text("Open Quick Settings, tap Edit, then drag Smart Ringer into the active tiles.")
-                            }
-                        }
-                    }
+                    QuickSettingsRow(onAddTile = systemAccess.requestAddTile)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickSettingsRow(onAddTile: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Default.Apps, contentDescription = null)
+            Column(Modifier.weight(1f)) {
+                Text("Smart Ringer tile", fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        "Toggle all automation without opening the app."
+                    } else {
+                        "Open Quick Settings, tap Edit, then drag Smart Ringer into the active tiles."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                TextButton(onClick = onAddTile) {
+                    Text("Add tile")
                 }
             }
         }

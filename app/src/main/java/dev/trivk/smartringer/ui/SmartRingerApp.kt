@@ -12,6 +12,9 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -27,9 +30,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -46,6 +49,7 @@ import dev.trivk.smartringer.model.RingerSchedule
 import dev.trivk.smartringer.R
 import dev.trivk.smartringer.schedule.AutomationTileService
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @Composable
 fun SmartRingerApp(viewModel: MainViewModel) {
@@ -58,8 +62,9 @@ fun SmartRingerApp(viewModel: MainViewModel) {
     var showAddChoice by remember { mutableStateOf(false) }
     var permissionSetupDismissed by rememberSaveable { mutableStateOf(false) }
     var notificationRequested by rememberSaveable { mutableStateOf(false) }
-    var backProgress by remember { mutableFloatStateOf(0f) }
+    val backProgress = remember { Animatable(0f) }
     var backSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    val scope = rememberCoroutineScope()
 
     fun navigateHome() {
         screen = AppScreen.HOME
@@ -88,14 +93,16 @@ fun SmartRingerApp(viewModel: MainViewModel) {
     PredictiveBackHandler(enabled = screen != AppScreen.HOME) { progress ->
         try {
             progress.collect { backEvent ->
-                backProgress = backEvent.progress
+                backProgress.snapTo(backEvent.progress)
                 backSwipeEdge = backEvent.swipeEdge
             }
             navigateHome()
-            backProgress = 0f
+            backProgress.snapTo(0f)
         } catch (cancellation: CancellationException) {
             // A cancelled back gesture must leave the current screen intact.
-            backProgress = 0f
+            scope.launch {
+                backProgress.animateTo(0f, tween(durationMillis = 160, easing = LinearEasing))
+            }
             throw cancellation
         }
     }
@@ -109,7 +116,17 @@ fun SmartRingerApp(viewModel: MainViewModel) {
 
     Box(Modifier.fillMaxSize()) {
         if (screen != AppScreen.HOME) {
-            Surface(Modifier.fillMaxSize()) { homeContent() }
+            Surface(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val progress = backProgress.value
+                        val easedProgress = easeOutCubic(progress)
+                        scaleX = 1f + FadeThroughScaleDelta * (1f - easedProgress)
+                        scaleY = 1f + FadeThroughScaleDelta * (1f - easedProgress)
+                        alpha = (progress / FadeThroughProgress).coerceIn(0f, 1f)
+                    },
+            ) { homeContent() }
         }
 
         Surface(
@@ -117,13 +134,16 @@ fun SmartRingerApp(viewModel: MainViewModel) {
                 .fillMaxSize()
                 .graphicsLayer {
                     if (screen != AppScreen.HOME) {
+                        val progress = backProgress.value
+                        val easedProgress = easeOutCubic(progress)
                         val direction = if (backSwipeEdge == BackEventCompat.EDGE_LEFT) 1f else -1f
-                        translationX = size.width * backProgress * 0.06f * direction
-                        scaleX = 1f - backProgress * 0.1f
-                        scaleY = 1f - backProgress * 0.1f
-                        shape = RoundedCornerShape(28.dp * backProgress)
-                        clip = backProgress > 0f
-                        shadowElevation = 12.dp.toPx() * backProgress
+                        translationX = size.width * easedProgress * 0.1f * direction
+                        scaleX = 1f - easedProgress * ExitScaleDelta
+                        scaleY = 1f - easedProgress * ExitScaleDelta
+                        alpha = 1f - (progress / FadeThroughProgress).coerceIn(0f, 1f)
+                        shape = RoundedCornerShape(28.dp * easedProgress)
+                        clip = progress > 0f
+                        shadowElevation = 16.dp.toPx() * easedProgress
                     }
                 },
         ) {
@@ -199,6 +219,15 @@ fun SmartRingerApp(viewModel: MainViewModel) {
 }
 
 private enum class AppScreen { HOME, SCHEDULE_EDITOR, TIMER, SETTINGS }
+
+private const val FadeThroughProgress = 0.35f
+private const val ExitScaleDelta = 0.1f
+private const val FadeThroughScaleDelta = 0.1f
+
+private fun easeOutCubic(progress: Float): Float {
+    val inverse = 1f - progress
+    return 1f - inverse * inverse * inverse
+}
 
 @Composable
 internal fun rememberSystemAccess(): SystemAccess {
