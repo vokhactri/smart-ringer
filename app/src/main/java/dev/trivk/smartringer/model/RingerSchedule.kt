@@ -33,4 +33,5 @@ data class RingerTimer(
 data class AppSettings(
     val automationEnabled: Boolean = true,
     val use24HourTime: Boolean = false,
+    val setupPromptDismissed: Boolean = false,
 )

@@ -83,6 +83,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setUse24HourTime(enabled: Boolean) = repository.setUse24HourTime(enabled)
 
+    fun dismissSetupPrompt() = repository.setSetupPromptDismissed(true)
+
     fun reconcile() = scheduler.reconcile(TriggerReason.APP_RESUME)
 
     private fun refreshTile() {

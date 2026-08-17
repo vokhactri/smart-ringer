@@ -39,7 +39,9 @@ class ScheduleRepository(context: Context) {
 
     val settings: Flow<AppSettings> = callbackFlow {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == AUTOMATION_ENABLED_KEY || key == USE_24_HOUR_KEY) trySend(loadSettings())
+            if (key == AUTOMATION_ENABLED_KEY || key == USE_24_HOUR_KEY || key == SETUP_PROMPT_DISMISSED_KEY) {
+                trySend(loadSettings())
+            }
         }
         preferences.registerOnSharedPreferenceChangeListener(listener)
         trySend(loadSettings())
@@ -100,6 +102,7 @@ class ScheduleRepository(context: Context) {
     fun loadSettings() = AppSettings(
         automationEnabled = preferences.getBoolean(AUTOMATION_ENABLED_KEY, true),
         use24HourTime = preferences.getBoolean(USE_24_HOUR_KEY, false),
+        setupPromptDismissed = preferences.getBoolean(SETUP_PROMPT_DISMISSED_KEY, false),
     )
 
     fun setAutomationEnabled(enabled: Boolean) {
@@ -108,6 +111,10 @@ class ScheduleRepository(context: Context) {
 
     fun setUse24HourTime(enabled: Boolean) {
         preferences.edit().putBoolean(USE_24_HOUR_KEY, enabled).apply()
+    }
+
+    fun setSetupPromptDismissed(dismissed: Boolean) {
+        preferences.edit().putBoolean(SETUP_PROMPT_DISMISSED_KEY, dismissed).apply()
     }
 
     internal fun loadAppliedState(): AppliedState? {
@@ -179,6 +186,7 @@ class ScheduleRepository(context: Context) {
         private const val TIMER_KEY = "timer"
         private const val AUTOMATION_ENABLED_KEY = "automation_enabled"
         private const val USE_24_HOUR_KEY = "use_24_hour"
+        private const val SETUP_PROMPT_DISMISSED_KEY = "setup_prompt_dismissed"
         private const val APPLIED_RULE_KEY = "applied_rule"
         private const val PREVIOUS_RINGER_MODE_KEY = "previous_ringer_mode"
         private const val PREVIOUS_INTERRUPTION_FILTER_KEY = "previous_interruption_filter"

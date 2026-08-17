@@ -50,7 +50,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.trivk.smartringer.MainViewModel
+import dev.trivk.smartringer.model.RingerMode
 import dev.trivk.smartringer.model.RingerSchedule
+import dev.trivk.smartringer.model.RingerTimer
 import dev.trivk.smartringer.R
 import dev.trivk.smartringer.schedule.AutomationTileService
 import kotlinx.coroutines.CancellationException
@@ -237,24 +239,47 @@ fun SmartRingerApp(viewModel: MainViewModel) {
         )
     }
 
-    if (!permissionSetupDismissed && (!access.exactAlarmGranted || !access.dndGranted)) {
+    val missingExactAlarm = !access.exactAlarmGranted
+    val missingDnd = requiresDndAccess(schedules, timer) && !access.dndGranted
+    val dismissSetupPrompt = {
+        permissionSetupDismissed = true
+        viewModel.dismissSetupPrompt()
+    }
+
+    if (!permissionSetupDismissed && !settings.setupPromptDismissed && (missingExactAlarm || missingDnd)) {
         AlertDialog(
-            onDismissRequest = { permissionSetupDismissed = true },
+            onDismissRequest = dismissSetupPrompt,
             title = { Text("Finish setup") },
             text = {
-                Text("Smart Ringer needs exact alarm access to run on time and ringer policy access for Silent and Do Not Disturb. Grant both in Android settings.")
+                Text(
+                    when {
+                        missingExactAlarm && missingDnd ->
+                            "Smart Ringer needs exact alarm access to run on time and ringer policy access for Silent and Do Not Disturb. Grant both in Android settings."
+                        missingExactAlarm ->
+                            "Smart Ringer needs exact alarm access so ringer changes happen at the selected time."
+                        else ->
+                            "Smart Ringer needs ringer policy access for the schedules that use Silent or Do Not Disturb."
+                    },
+                )
             },
             confirmButton = {
-                TextButton(onClick = if (!access.exactAlarmGranted) access.requestExactAlarm else access.requestDnd) {
-                    Text(if (!access.exactAlarmGranted) "Allow exact alarms" else "Allow ringer access")
+                TextButton(onClick = if (missingExactAlarm) access.requestExactAlarm else access.requestDnd) {
+                    Text(if (missingExactAlarm) "Allow exact alarms" else "Allow ringer access")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { permissionSetupDismissed = true }) { Text("Later") }
+                TextButton(onClick = dismissSetupPrompt) { Text("Later") }
             },
         )
     }
 }
+
+/**
+ * Ringer policy access is only needed to enter Silent or Do Not Disturb — plain Vibrate never
+ * requires it, so a user who only schedules Vibrate should never be asked for it.
+ */
+internal fun requiresDndAccess(schedules: List<RingerSchedule>, timer: RingerTimer?): Boolean =
+    schedules.any { it.mode != RingerMode.VIBRATE } || (timer != null && timer.mode != RingerMode.VIBRATE)
 
 private enum class AppScreen { HOME, SCHEDULE_EDITOR, TIMER, SETTINGS }
 private enum class NavigationMotion { INSTANT, FORWARD, BACK }

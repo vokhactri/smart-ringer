@@ -133,7 +133,7 @@ internal fun HomeScreen(
                     )
                 }
             }
-            if ((schedules.any { it.mode != RingerMode.VIBRATE } || timer?.mode?.let { it != RingerMode.VIBRATE } == true) && !access.dndGranted) {
+            if (requiresDndAccess(schedules, timer) && !access.dndGranted) {
                 item {
                     AccessCard(
                         title = "Allow ringer policy access",
