@@ -17,7 +17,10 @@ android {
         applicationId = "dev.trivk.smartringer"
         minSdk = 26
         targetSdk = 35
-        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toInt() ?: 8
+        // Derived from the release tag by the CI workflow (1.1.6 -> 10106) so every published build
+        // outranks the one before it. Android refuses to install an APK whose versionCode is not
+        // higher than the installed one, which would silently strand sideloaded updates.
+        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toInt() ?: 10106
         versionName = providers.environmentVariable("VERSION_NAME").orNull?.removePrefix("v") ?: "1.1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

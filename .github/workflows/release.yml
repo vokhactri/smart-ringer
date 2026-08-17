@@ -19,7 +19,6 @@ jobs:
     timeout-minutes: 25
     env:
       VERSION_NAME: ${{ github.ref_name }}
-      VERSION_CODE: ${{ github.run_number }}
       SIGNING_STORE_FILE: ${{ github.workspace }}/app/release.jks
       SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
       SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
@@ -38,6 +37,16 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+
+      # The workflow run number would reset if this file were ever renamed, and a versionCode that
+      # goes backwards makes Android reject the update. Deriving it from the tag keeps it rising
+      # with the version the user actually sees.
+      - name: Derive version code from the tag
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r major minor patch <<< "${version%%-*}"
+          echo "VERSION_CODE=$(( ${major:-0} * 10000 + ${minor:-0} * 100 + ${patch:-0} ))" >> "$GITHUB_ENV"
 
       - name: Restore release signing key
         env:
