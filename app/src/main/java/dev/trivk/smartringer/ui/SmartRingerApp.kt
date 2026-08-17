@@ -216,6 +216,7 @@ fun SmartRingerApp(viewModel: MainViewModel) {
                         onBack = { navigateHome() },
                         onAutomationEnabled = viewModel::setAutomationEnabled,
                         onUse24HourTime = viewModel::setUse24HourTime,
+                        onCustomThemeColor = viewModel::setCustomThemeColor,
                     )
                 }
             }

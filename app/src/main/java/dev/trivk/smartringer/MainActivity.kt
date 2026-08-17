@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.trivk.smartringer.ui.SmartRingerApp
 import dev.trivk.smartringer.ui.theme.SmartRingerTheme
 
@@ -15,7 +17,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            SmartRingerTheme {
+            val settings by viewModel.settings.collectAsStateWithLifecycle()
+            SmartRingerTheme(customSeedArgb = settings.customThemeColorArgb) {
                 SmartRingerApp(viewModel)
             }
         }
