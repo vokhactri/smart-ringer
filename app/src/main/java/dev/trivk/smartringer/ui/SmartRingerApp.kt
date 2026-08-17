@@ -378,7 +378,9 @@ internal fun rememberSystemAccess(): SystemAccess {
             }
         },
         requestBatterySettings = {
-            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = android.net.Uri.parse("package:${context.packageName}")
+            })
         },
         requestUnusedAppSettings = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
