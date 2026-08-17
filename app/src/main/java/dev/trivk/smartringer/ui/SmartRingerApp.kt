@@ -349,6 +349,10 @@ internal fun rememberSystemAccess(): SystemAccess {
         notificationGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
         batteryOptimizationExempt = powerManager.isIgnoringBatteryOptimizations(context.packageName),
+        // Hibernating an "unused" app also force-stops it, which suspends every registered alarm —
+        // the one system feature that silently defeats a set-and-forget scheduler.
+        unusedAppPauseDisabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+            context.packageManager.isAutoRevokeWhitelisted,
         requestExactAlarm = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
@@ -376,6 +380,13 @@ internal fun rememberSystemAccess(): SystemAccess {
         requestBatterySettings = {
             context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         },
+        requestUnusedAppSettings = {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.startActivity(Intent(Intent.ACTION_AUTO_REVOKE_PERMISSIONS).apply {
+                    data = android.net.Uri.parse("package:${context.packageName}")
+                })
+            }
+        },
     )
 }
 
@@ -384,9 +395,11 @@ internal data class SystemAccess(
     val dndGranted: Boolean,
     val notificationGranted: Boolean,
     val batteryOptimizationExempt: Boolean,
+    val unusedAppPauseDisabled: Boolean,
     val requestExactAlarm: () -> Unit,
     val requestDnd: () -> Unit,
     val requestNotifications: () -> Unit,
     val requestAddTile: () -> Unit,
     val requestBatterySettings: () -> Unit,
+    val requestUnusedAppSettings: () -> Unit,
 )

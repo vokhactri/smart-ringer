@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SettingsRemote
 import androidx.compose.material.icons.filled.Timer
@@ -117,6 +118,16 @@ internal fun SettingsScreen(
                         missingText = "Review",
                         onClick = systemAccess.requestBatterySettings,
                     )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        PermissionRow(
+                            icon = Icons.Default.PauseCircle,
+                            title = "Manage unused apps",
+                            granted = systemAccess.unusedAppPauseDisabled,
+                            grantedText = "Off",
+                            missingText = "Review",
+                            onClick = systemAccess.requestUnusedAppSettings,
+                        )
+                    }
                 }
             }
             item {
