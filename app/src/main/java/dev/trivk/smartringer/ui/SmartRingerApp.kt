@@ -67,7 +67,6 @@ fun SmartRingerApp(viewModel: MainViewModel) {
     val access = rememberSystemAccess()
     var editorSchedule by remember { mutableStateOf<RingerSchedule?>(null) }
     var screen by rememberSaveable { mutableStateOf(AppScreen.HOME) }
-    var showAddChoice by remember { mutableStateOf(false) }
     var permissionSetupDismissed by rememberSaveable { mutableStateOf(false) }
     var notificationRequested by rememberSaveable { mutableStateOf(false) }
     val backProgress = remember { Animatable(0f) }
@@ -92,7 +91,11 @@ fun SmartRingerApp(viewModel: MainViewModel) {
             timer = timer,
             settings = settings,
             systemAccess = access,
-            onAdd = { showAddChoice = true },
+            onAddSchedule = {
+                editorSchedule = null
+                navigateTo(AppScreen.SCHEDULE_EDITOR)
+            },
+            onAddTimer = { navigateTo(AppScreen.TIMER) },
             onEdit = {
                 editorSchedule = it
                 navigateTo(AppScreen.SCHEDULE_EDITOR)
@@ -217,27 +220,6 @@ fun SmartRingerApp(viewModel: MainViewModel) {
                 }
             }
         }
-    }
-
-    if (showAddChoice) {
-        AlertDialog(
-            onDismissRequest = { showAddChoice = false },
-            title = { Text("Create automation") },
-            text = { Text("Use a repeating schedule or start a one-time timer.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showAddChoice = false
-                    editorSchedule = null
-                    navigateTo(AppScreen.SCHEDULE_EDITOR)
-                }) { Text("Schedule") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showAddChoice = false
-                    navigateTo(AppScreen.TIMER)
-                }) { Text("Timer") }
-            },
-        )
     }
 
     val missingExactAlarm = !access.exactAlarmGranted
@@ -385,15 +367,31 @@ internal fun rememberSystemAccess(): SystemAccess {
                 notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         },
-        requestAddTile = {
+        requestAddTile = { onResult ->
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val activity = context as? Activity
-                activity?.getSystemService(StatusBarManager::class.java)?.requestAddTileService(
-                    ComponentName(context, AutomationTileService::class.java),
-                    "Smart Ringer",
-                    Icon.createWithResource(context, R.drawable.ic_qs_tile),
-                    context.mainExecutor,
-                ) { }
+                val statusBarManager = activity?.getSystemService(StatusBarManager::class.java)
+                if (statusBarManager == null) {
+                    onResult(TileAddResult.NOT_ADDED)
+                } else {
+                    statusBarManager.requestAddTileService(
+                        ComponentName(context, AutomationTileService::class.java),
+                        "Smart Ringer",
+                        Icon.createWithResource(context, R.drawable.ic_qs_tile),
+                        context.mainExecutor,
+                    ) { result ->
+                        onResult(
+                            when (result) {
+                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> TileAddResult.ADDED
+                                StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED ->
+                                    TileAddResult.ALREADY_ADDED
+                                else -> TileAddResult.NOT_ADDED
+                            },
+                        )
+                    }
+                }
+            } else {
+                onResult(TileAddResult.NOT_ADDED)
             }
         },
         requestBatterySettings = {
@@ -420,7 +418,9 @@ internal data class SystemAccess(
     val requestExactAlarm: () -> Unit,
     val requestDnd: () -> Unit,
     val requestNotifications: () -> Unit,
-    val requestAddTile: () -> Unit,
+    val requestAddTile: ((TileAddResult) -> Unit) -> Unit,
     val requestBatterySettings: () -> Unit,
     val requestUnusedAppSettings: () -> Unit,
 )
+
+internal enum class TileAddResult { ADDED, ALREADY_ADDED, NOT_ADDED }

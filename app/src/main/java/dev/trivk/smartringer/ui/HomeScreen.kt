@@ -1,5 +1,13 @@
 package dev.trivk.smartringer.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,14 +17,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -66,7 +78,8 @@ internal fun HomeScreen(
     timer: RingerTimer?,
     settings: AppSettings,
     systemAccess: SystemAccess,
-    onAdd: () -> Unit,
+    onAddSchedule: () -> Unit,
+    onAddTimer: () -> Unit,
     onEdit: (RingerSchedule) -> Unit,
     onToggle: (RingerSchedule) -> Unit,
     onDelete: (RingerSchedule) -> Unit,
@@ -76,13 +89,34 @@ internal fun HomeScreen(
 ) {
     var showHelp by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<RingerSchedule?>(null) }
+    var showAddMenu by remember { mutableStateOf(false) }
     val access = systemAccess
+
+    BackHandler(enabled = showAddMenu) { showAddMenu = false }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Smart Ringer") },
+                title = {
+                    Column {
+                        Text("Smart Ringer")
+                        Text(
+                            text = if (settings.automationEnabled) "Automation active" else "Automation paused",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (settings.automationEnabled) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                },
                 actions = {
+                    Switch(
+                        checked = settings.automationEnabled,
+                        onCheckedChange = onToggleAutomation,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -93,76 +127,124 @@ internal fun HomeScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAdd,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Add automation") },
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                AnimatedVisibility(
+                    visible = showAddMenu,
+                    enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+                    exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom),
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        ExtendedFloatingActionButton(
+                            onClick = {
+                                showAddMenu = false
+                                onAddSchedule()
+                            },
+                            icon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
+                            text = { Text("Schedule") },
+                        )
+                        ExtendedFloatingActionButton(
+                            onClick = {
+                                showAddMenu = false
+                                onAddTimer()
+                            },
+                            icon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                            text = { Text("Timer") },
+                        )
+                    }
+                }
+                ExtendedFloatingActionButton(
+                    onClick = { showAddMenu = !showAddMenu },
+                    icon = {
+                        Icon(
+                            if (showAddMenu) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = null,
+                        )
+                    },
+                    text = { Text(if (showAddMenu) "Close" else "Add automation") },
+                )
+            }
         },
     ) { innerPadding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                AutomationMasterCard(
-                    enabled = settings.automationEnabled,
-                    onChange = onToggleAutomation,
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (!access.notificationGranted) {
+                    item {
+                        AccessCard(
+                            title = "Allow notifications",
+                            body = "Shows which schedule or timer is active and when it finishes.",
+                            button = "Allow",
+                            onClick = access.requestNotifications,
+                        )
+                    }
+                }
+                if (!access.exactAlarmGranted) {
+                    item {
+                        AccessCard(
+                            title = "Allow exact alarms",
+                            body = "Required so ringer changes happen at the selected time.",
+                            button = "Open settings",
+                            onClick = access.requestExactAlarm,
+                        )
+                    }
+                }
+                if (requiresDndAccess(schedules, timer) && !access.dndGranted) {
+                    item {
+                        AccessCard(
+                            title = "Allow ringer policy access",
+                            body = "Required by schedules that use Silent or Do Not Disturb mode.",
+                            button = "Grant access",
+                            onClick = access.requestDnd,
+                        )
+                    }
+                }
+                timer?.let { activeTimer ->
+                    item {
+                        TimerCard(
+                            timer = activeTimer,
+                            onCancel = onCancelTimer,
+                        )
+                    }
+                }
+                if (schedules.isEmpty() && timer == null) {
+                    item { EmptySchedules(onAddSchedule) }
+                } else {
+                    items(schedules, key = RingerSchedule::id) { schedule ->
+                        ScheduleCard(
+                            schedule = schedule,
+                            use24HourTime = settings.use24HourTime,
+                            onToggle = { onToggle(schedule) },
+                            onEdit = { onEdit(schedule) },
+                            onDelete = { pendingDelete = schedule },
+                        )
+                    }
+                }
+            }
+            if (showAddMenu) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.18f))
+                        .clickable(
+                            interactionSource = null,
+                            indication = null,
+                            onClickLabel = "Close add automation menu",
+                            onClick = { showAddMenu = false },
+                        ),
                 )
-            }
-            if (!access.notificationGranted) {
-                item {
-                    AccessCard(
-                        title = "Allow notifications",
-                        body = "Shows which schedule or timer is active and when it finishes.",
-                        button = "Allow",
-                        onClick = access.requestNotifications,
-                    )
-                }
-            }
-            if (!access.exactAlarmGranted) {
-                item {
-                    AccessCard(
-                        title = "Allow exact alarms",
-                        body = "Required so ringer changes happen at the selected time.",
-                        button = "Open settings",
-                        onClick = access.requestExactAlarm,
-                    )
-                }
-            }
-            if (requiresDndAccess(schedules, timer) && !access.dndGranted) {
-                item {
-                    AccessCard(
-                        title = "Allow ringer policy access",
-                        body = "Required by schedules that use Silent or Do Not Disturb mode.",
-                        button = "Grant access",
-                        onClick = access.requestDnd,
-                    )
-                }
-            }
-            timer?.let { activeTimer ->
-                item {
-                    TimerCard(
-                        timer = activeTimer,
-                        onCancel = onCancelTimer,
-                    )
-                }
-            }
-            if (schedules.isEmpty() && timer == null) {
-                item { EmptySchedules(onAdd) }
-            } else {
-                items(schedules, key = RingerSchedule::id) { schedule ->
-                    ScheduleCard(
-                        schedule = schedule,
-                        use24HourTime = settings.use24HourTime,
-                        onToggle = { onToggle(schedule) },
-                        onEdit = { onEdit(schedule) },
-                        onDelete = { pendingDelete = schedule },
-                    )
-                }
             }
         }
     }
@@ -211,28 +293,49 @@ private fun ScheduleCard(
             else MaterialTheme.colorScheme.surfaceVariant,
         ),
     ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            // IconButton keeps a 48 dp touch target around its 24 dp glyph. Using 8 dp at the end
+            // makes the visible Delete icon land on the same 20 dp inset as the text on the left.
+            modifier = Modifier.padding(start = 20.dp, top = 20.dp, end = 8.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    schedule.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(daySummary(schedule.days), color = MaterialTheme.colorScheme.primary)
-                Text(
-                    "${formatTime(schedule.startTime, use24HourTime)} – ${formatTime(schedule.endTime, use24HourTime)}",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(modeLabel(schedule.mode), style = MaterialTheme.typography.labelLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        schedule.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(daySummary(schedule.days), color = MaterialTheme.colorScheme.primary)
+                }
+                Box(
+                    modifier = Modifier.width(96.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Switch(
+                        checked = schedule.enabled,
+                        onCheckedChange = { onToggle() },
+                        modifier = Modifier.offset(x = 4.dp),
+                    )
+                }
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Switch(checked = schedule.enabled, onCheckedChange = { onToggle() })
-                Row {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        "${formatTime(schedule.startTime, use24HourTime)} – ${formatTime(schedule.endTime, use24HourTime)}",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(modeLabel(schedule.mode), style = MaterialTheme.typography.labelLarge)
+                }
+                Row(modifier = Modifier.width(96.dp)) {
                     IconButton(onClick = onEdit) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit ${schedule.name}")
                     }
@@ -245,29 +348,6 @@ private fun ScheduleCard(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun AutomationMasterCard(enabled: Boolean, onChange: (Boolean) -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (enabled) MaterialTheme.colorScheme.primaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Automation", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(if (enabled) "Schedules and timers are active" else "All ringer automation is paused")
-            }
-            Switch(checked = enabled, onCheckedChange = onChange)
         }
     }
 }

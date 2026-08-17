@@ -17,32 +17,44 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SettingsRemote
-import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.trivk.smartringer.model.AppSettings
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +65,10 @@ internal fun SettingsScreen(
     onAutomationEnabled: (Boolean) -> Unit,
     onUse24HourTime: (Boolean) -> Unit,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var showTileHelp by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -64,6 +80,7 @@ internal fun SettingsScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -74,8 +91,8 @@ internal fun SettingsScreen(
         ) {
             item {
                 SettingsSection("Automation") {
-                    SettingsToggle(
-                        icon = Icons.Default.Timer,
+                    AutomationSettingRow(
+                        icon = Icons.Default.AutoMode,
                         title = "Enable automation",
                         body = "Run schedules, timers, recovery checks, and the Quick Settings tile.",
                         checked = settings.automationEnabled,
@@ -85,12 +102,10 @@ internal fun SettingsScreen(
             }
             item {
                 SettingsSection("Time format") {
-                    TimeFormatChoice("12-hour", "9:30 PM", selected = !settings.use24HourTime) {
-                        onUse24HourTime(false)
-                    }
-                    TimeFormatChoice("24-hour", "21:30", selected = settings.use24HourTime) {
-                        onUse24HourTime(true)
-                    }
+                    TimeFormatSelector(
+                        use24HourTime = settings.use24HourTime,
+                        onUse24HourTime = onUse24HourTime,
+                    )
                 }
             }
             item {
@@ -141,18 +156,46 @@ internal fun SettingsScreen(
             }
             item {
                 SettingsSection("Quick Settings") {
-                    QuickSettingsRow(onAddTile = systemAccess.requestAddTile)
+                    QuickSettingsRow(
+                        onAddTile = {
+                            systemAccess.requestAddTile { result ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        when (result) {
+                                            TileAddResult.ADDED -> "Quick Settings tile added"
+                                            TileAddResult.ALREADY_ADDED -> "Quick Settings tile is already added"
+                                            TileAddResult.NOT_ADDED -> "Quick Settings tile wasn't added"
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                        onHowToAdd = { showTileHelp = true },
+                    )
                 }
             }
         }
     }
+
+    if (showTileHelp) {
+        AlertDialog(
+            onDismissRequest = { showTileHelp = false },
+            title = { Text("Add the Quick Settings tile") },
+            text = {
+                Text("Open Quick Settings, tap Edit, then drag Smart Ringer into the active tiles.")
+            },
+            confirmButton = {
+                TextButton(onClick = { showTileHelp = false }) { Text("Got it") }
+            },
+        )
+    }
 }
 
 @Composable
-private fun QuickSettingsRow(onAddTile: () -> Unit) {
-    Card(
+private fun QuickSettingsRow(onAddTile: () -> Unit, onHowToAdd: () -> Unit) {
+    Surface(
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Row(
             modifier = Modifier
@@ -164,19 +207,16 @@ private fun QuickSettingsRow(onAddTile: () -> Unit) {
             Icon(Icons.Default.Apps, contentDescription = null)
             Column(Modifier.weight(1f)) {
                 Text("Smart Ringer tile", fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        "Toggle all automation without opening the app."
-                    } else {
-                        "Open Quick Settings, tap Edit, then drag Smart Ringer into the active tiles."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Text("Toggle all automation from Quick Settings.", style = MaterialTheme.typography.bodyMedium)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                TextButton(onClick = onAddTile) {
-                    Text("Add tile")
-                }
+            TextButton(
+                onClick = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    onAddTile
+                } else {
+                    onHowToAdd
+                },
+            ) {
+                Text(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "Add" else "How to add")
             }
         }
     }
@@ -191,25 +231,28 @@ private fun SettingsSection(title: String, content: @Composable ColumnScope.() -
 }
 
 @Composable
-private fun SettingsToggle(
+private fun AutomationSettingRow(
     icon: ImageVector,
     title: String,
     body: String,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
 ) {
-    Card(shape = RoundedCornerShape(18.dp)) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Icon(icon, contentDescription = null)
             Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
-                Text(body, style = MaterialTheme.typography.bodySmall)
+                Text(body, style = MaterialTheme.typography.bodyMedium)
             }
             Switch(checked = checked, onCheckedChange = onChange)
         }
@@ -217,23 +260,25 @@ private fun SettingsToggle(
 }
 
 @Composable
-private fun TimeFormatChoice(label: String, example: String, selected: Boolean, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RadioButton(selected = selected, onClick = onClick)
-            Text(label, modifier = Modifier.weight(1f))
-            Text(example, style = MaterialTheme.typography.titleMedium)
+private fun TimeFormatSelector(use24HourTime: Boolean, onUse24HourTime: (Boolean) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            listOf(false to "12-hour", true to "24-hour").forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    modifier = Modifier.weight(1f),
+                    selected = use24HourTime == value,
+                    onClick = { onUse24HourTime(value) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                    label = { Text(label) },
+                )
+            }
         }
+        Text(
+            text = "Example: ${if (use24HourTime) "21:30" else "9:30 PM"}",
+            modifier = Modifier.padding(horizontal = 4.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
