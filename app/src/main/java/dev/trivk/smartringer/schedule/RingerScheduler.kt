@@ -73,44 +73,40 @@ class RingerScheduler(private val context: Context) {
         val applied = repository.loadAppliedState()
 
         if (selected == null) {
-            if (applied != null) {
-                val restored = runCatching {
-                    audioManager.ringerMode = applied.previousRingerMode
-                    if (notificationManager.isNotificationPolicyAccessGranted) {
-                        notificationManager.setInterruptionFilter(applied.previousInterruptionFilter)
-                    }
-                }.isSuccess
-                if (restored) {
-                    repository.clearAppliedState()
-                    notifications.showEnded()
-                } else {
-                    notifications.showPermissionError("the previous ringer mode")
-                }
-            }
+            applied?.let { finish(it, audioManager, notificationManager) }
             return
         }
 
-        if (applied == null) {
-            repository.saveAppliedState(
-                AppliedState(
-                    ruleId = selected.id,
-                    previousRingerMode = audioManager.ringerMode,
-                    previousInterruptionFilter = notificationManager.currentInterruptionFilter,
-                ),
-            )
-        } else if (applied.ruleId != selected.id) {
-            repository.updateAppliedRule(selected.id)
+        if (applied != null && applied.occurrence == selected.occurrence) {
+            hold(selected, applied, audioManager, notificationManager)
+            return
         }
+
+        start(selected, applied, audioManager, notificationManager)
+    }
+
+    /** First reconcile of this run: remember the pre-automation state and apply the mode. */
+    private fun start(
+        selected: ActiveAutomation,
+        applied: AppliedState?,
+        audioManager: AudioManager,
+        notificationManager: NotificationManager,
+    ) {
+        // Read before applying, otherwise the snapshot is the state we are about to install.
+        // A chain of back-to-back schedules restores to the state before the first one.
+        val previousRingerMode = applied?.previousRingerMode ?: audioManager.ringerMode
+        val previousInterruptionFilter = applied?.previousInterruptionFilter
+            ?: notificationManager.currentInterruptionFilter
 
         val succeeded = runCatching {
             when (selected.mode) {
                 RingerMode.VIBRATE -> {
-                    restoreInterruptions(notificationManager)
+                    clearDoNotDisturb(notificationManager)
                     audioManager.ringerMode = AudioManager.RINGER_MODE_VIBRATE
                 }
                 RingerMode.SILENT -> {
                     check(notificationManager.isNotificationPolicyAccessGranted)
-                    restoreInterruptions(notificationManager)
+                    clearDoNotDisturb(notificationManager)
                     audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
                 }
                 RingerMode.DO_NOT_DISTURB -> {
@@ -120,14 +116,84 @@ class RingerScheduler(private val context: Context) {
             }
         }.isSuccess
 
-        if (succeeded) {
-            notifications.showActive(selected.id, selected.name, selected.mode, selected.endsAtMillis)
-        } else {
+        if (!succeeded) {
+            // Nothing was changed, so nothing is recorded as applied — a later reconcile must not
+            // "restore" a mode this run never touched.
             notifications.showPermissionError(selected.name)
+            return
+        }
+
+        repository.saveAppliedState(
+            AppliedState(
+                ruleId = selected.id,
+                occurrence = selected.occurrence,
+                previousRingerMode = previousRingerMode,
+                previousInterruptionFilter = previousInterruptionFilter,
+                appliedRingerMode = audioManager.ringerMode,
+                appliedInterruptionFilter = notificationManager.currentInterruptionFilter,
+                overridden = false,
+            ),
+        )
+        notifications.showActive(selected.id, selected.name, selected.mode, selected.endsAtMillis)
+    }
+
+    /**
+     * A later reconcile of a run already applied. The mode is never rewritten here: if the ringer no
+     * longer holds what the app left there, the user changed it by hand and owns it until this run
+     * ends.
+     */
+    private fun hold(
+        selected: ActiveAutomation,
+        applied: AppliedState,
+        audioManager: AudioManager,
+        notificationManager: NotificationManager,
+    ) {
+        if (applied.overridden) {
+            notifications.cancelActive()
+            return
+        }
+        val changedByHand = audioManager.ringerMode != applied.appliedRingerMode ||
+            notificationManager.currentInterruptionFilter != applied.appliedInterruptionFilter
+        if (changedByHand) {
+            repository.saveAppliedState(applied.copy(overridden = true))
+            notifications.cancelActive()
+            return
+        }
+        // Still holding. showActive is a no-op unless the notification actually went missing.
+        notifications.showActive(selected.id, selected.name, selected.mode, selected.endsAtMillis)
+    }
+
+    /** The run is over: put back what the app changed, unless the user has taken over. */
+    private fun finish(
+        applied: AppliedState,
+        audioManager: AudioManager,
+        notificationManager: NotificationManager,
+    ) {
+        if (applied.overridden) {
+            repository.clearAppliedState()
+            notifications.cancelActive()
+            return
+        }
+        val restored = runCatching {
+            audioManager.ringerMode = applied.previousRingerMode
+            if (notificationManager.isNotificationPolicyAccessGranted) {
+                notificationManager.setInterruptionFilter(applied.previousInterruptionFilter)
+            }
+        }.isSuccess
+        if (restored) {
+            repository.clearAppliedState()
+            notifications.showEnded()
+        } else {
+            notifications.cancelActive()
+            notifications.showPermissionError("the previous ringer mode")
         }
     }
 
-    private fun restoreInterruptions(manager: NotificationManager) {
+    /**
+     * Vibrate and Silent are meaningless while Do Not Disturb is filtering, so a run clears it on
+     * the way in. The pre-automation filter is snapshotted first and put back when the run ends.
+     */
+    private fun clearDoNotDisturb(manager: NotificationManager) {
         if (manager.isNotificationPolicyAccessGranted) {
             manager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
         }

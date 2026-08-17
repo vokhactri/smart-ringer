@@ -51,5 +51,12 @@ internal data class ActiveAutomation(
     val name: String,
     val mode: RingerMode,
     val endsAtMillis: Long,
-)
+) {
+    /**
+     * Identifies this single run and what it intends to do: tomorrow's run of the same schedule is a
+     * different one, and editing the mode or the end time mid-run counts as a new one so the change
+     * takes effect immediately.
+     */
+    val occurrence: String get() = "$id|${mode.name}|$endsAtMillis"
+}
 

@@ -144,31 +144,44 @@ class ScheduleRepository(context: Context) {
         val ruleId = preferences.getString(APPLIED_RULE_KEY, null) ?: return null
         return AppliedState(
             ruleId = ruleId,
+            // Installs that predate override tracking have no occurrence stored. An empty string
+            // never matches a real occurrence, so the automation is simply applied again.
+            occurrence = preferences.getString(APPLIED_OCCURRENCE_KEY, "").orEmpty(),
             previousRingerMode = preferences.getInt(PREVIOUS_RINGER_MODE_KEY, android.media.AudioManager.RINGER_MODE_NORMAL),
             previousInterruptionFilter = preferences.getInt(
                 PREVIOUS_INTERRUPTION_FILTER_KEY,
                 android.app.NotificationManager.INTERRUPTION_FILTER_ALL,
             ),
+            appliedRingerMode = preferences.getInt(APPLIED_RINGER_MODE_KEY, android.media.AudioManager.RINGER_MODE_NORMAL),
+            appliedInterruptionFilter = preferences.getInt(
+                APPLIED_INTERRUPTION_FILTER_KEY,
+                android.app.NotificationManager.INTERRUPTION_FILTER_ALL,
+            ),
+            overridden = preferences.getBoolean(APPLIED_OVERRIDDEN_KEY, false),
         )
     }
 
     internal fun saveAppliedState(state: AppliedState) {
         preferences.edit()
             .putString(APPLIED_RULE_KEY, state.ruleId)
+            .putString(APPLIED_OCCURRENCE_KEY, state.occurrence)
             .putInt(PREVIOUS_RINGER_MODE_KEY, state.previousRingerMode)
             .putInt(PREVIOUS_INTERRUPTION_FILTER_KEY, state.previousInterruptionFilter)
+            .putInt(APPLIED_RINGER_MODE_KEY, state.appliedRingerMode)
+            .putInt(APPLIED_INTERRUPTION_FILTER_KEY, state.appliedInterruptionFilter)
+            .putBoolean(APPLIED_OVERRIDDEN_KEY, state.overridden)
             .commit()
-    }
-
-    internal fun updateAppliedRule(ruleId: String) {
-        preferences.edit().putString(APPLIED_RULE_KEY, ruleId).commit()
     }
 
     internal fun clearAppliedState() {
         preferences.edit()
             .remove(APPLIED_RULE_KEY)
+            .remove(APPLIED_OCCURRENCE_KEY)
             .remove(PREVIOUS_RINGER_MODE_KEY)
             .remove(PREVIOUS_INTERRUPTION_FILTER_KEY)
+            .remove(APPLIED_RINGER_MODE_KEY)
+            .remove(APPLIED_INTERRUPTION_FILTER_KEY)
+            .remove(APPLIED_OVERRIDDEN_KEY)
             .commit()
     }
 
@@ -211,6 +224,10 @@ class ScheduleRepository(context: Context) {
         private const val USE_24_HOUR_KEY = "use_24_hour"
         private const val SETUP_PROMPT_DISMISSED_KEY = "setup_prompt_dismissed"
         private const val APPLIED_RULE_KEY = "applied_rule"
+        private const val APPLIED_OCCURRENCE_KEY = "applied_occurrence"
+        private const val APPLIED_RINGER_MODE_KEY = "applied_ringer_mode"
+        private const val APPLIED_INTERRUPTION_FILTER_KEY = "applied_interruption_filter"
+        private const val APPLIED_OVERRIDDEN_KEY = "applied_overridden"
         private const val PREVIOUS_RINGER_MODE_KEY = "previous_ringer_mode"
         private const val PREVIOUS_INTERRUPTION_FILTER_KEY = "previous_interruption_filter"
         private const val ACTIVE_NOTIFICATION_POSTED_KEY = "active_notification_posted"
@@ -218,10 +235,27 @@ class ScheduleRepository(context: Context) {
     }
 }
 
+/**
+ * What the app did to the ringer, and what it expects to still find.
+ *
+ * [previousRingerMode] / [previousInterruptionFilter] are the pre-automation state to restore, kept
+ * from the first automation in a back-to-back chain. [appliedRingerMode] /
+ * [appliedInterruptionFilter] are read back straight after applying, so a later reconcile can tell
+ * whether the ringer still holds what the app left there. [occurrence] scopes [overridden] to a
+ * single run, so a manual change today does not disable the same schedule tomorrow.
+ *
+ * [ruleId] is what marks the state as present on disk. Nothing branches on its value, but it must
+ * keep being written: an install upgrading mid-run has no [occurrence] stored yet, and reading the
+ * state back through [ruleId] is what preserves its pre-automation snapshot across the upgrade.
+ */
 internal data class AppliedState(
     val ruleId: String,
+    val occurrence: String,
     val previousRingerMode: Int,
     val previousInterruptionFilter: Int,
+    val appliedRingerMode: Int,
+    val appliedInterruptionFilter: Int,
+    val overridden: Boolean,
 )
 
 /**
