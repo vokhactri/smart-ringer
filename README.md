@@ -44,7 +44,7 @@ The release workflow derives both `versionName` and `versionCode` from the tag (
 
 ## Android access
 
-Android requires **Alarms & reminders** access for exact execution on Android 12+ and **Do Not Disturb access** for Silent and Do Not Disturb schedules. Smart Ringer opens the corresponding system settings and never requests internet access.
+Android requires **Alarms & reminders** access for exact execution on Android 12+ and **Do Not Disturb access** for Silent and Do Not Disturb schedules. Smart Ringer opens the corresponding system settings and never requests internet access. For Do Not Disturb access, it opens Smart Ringer's per-app toggle directly when the device supports it and falls back to the system app list on other Android variants.
 
 A plain Vibrate schedule never needs ringer policy access, so it is only asked for once a schedule actually uses Silent or Do Not Disturb. When it is missing, that schedule cannot be applied — or its ringer restored at the end of the run — and Smart Ringer posts a notification saying so rather than failing silently.
 

@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Schedule
@@ -96,18 +99,24 @@ internal fun SettingsScreen(
                         icon = Icons.Default.Notifications,
                         title = "Notifications",
                         granted = systemAccess.notificationGranted,
+                        grantedText = "Allowed",
+                        missingText = "Not allowed",
                         onClick = systemAccess.requestNotifications,
                     )
                     PermissionRow(
                         icon = Icons.Default.Schedule,
                         title = "Exact alarms",
                         granted = systemAccess.exactAlarmGranted,
+                        grantedText = "Allowed",
+                        missingText = "Not allowed",
                         onClick = systemAccess.requestExactAlarm,
                     )
                     PermissionRow(
                         icon = Icons.Default.SettingsRemote,
                         title = "Ringer policy access",
                         granted = systemAccess.dndGranted,
+                        grantedText = "Allowed",
+                        missingText = "Not allowed",
                         onClick = systemAccess.requestDnd,
                     )
                     PermissionRow(
@@ -115,7 +124,7 @@ internal fun SettingsScreen(
                         title = "Battery optimization",
                         granted = systemAccess.batteryOptimizationExempt,
                         grantedText = "Unrestricted",
-                        missingText = "Review",
+                        missingText = "Restricted",
                         onClick = systemAccess.requestBatterySettings,
                     )
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -124,7 +133,7 @@ internal fun SettingsScreen(
                             title = "Manage unused apps",
                             granted = systemAccess.unusedAppPauseDisabled,
                             grantedText = "Off",
-                            missingText = "Review",
+                            missingText = "On",
                             onClick = systemAccess.requestUnusedAppSettings,
                         )
                     }
@@ -228,16 +237,27 @@ private fun TimeFormatChoice(label: String, example: String, selected: Boolean, 
     }
 }
 
+/**
+ * One visual grammar for every row: the title on the left, the current state on the right, and a
+ * trailing icon that says whether the state is fine (check) or needs a trip to system settings
+ * (chevron). Accent colour is spent only on rows that need attention, so scanning the section
+ * surfaces the gaps instead of the things already done.
+ */
 @Composable
 private fun PermissionRow(
     icon: ImageVector,
     title: String,
     granted: Boolean,
-    grantedText: String = "Allowed",
-    missingText: String = "Allow",
+    grantedText: String,
+    missingText: String,
     onClick: () -> Unit,
 ) {
-    Card {
+    val accent = if (granted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -245,13 +265,20 @@ private fun PermissionRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(icon, contentDescription = null)
+            Icon(icon, contentDescription = null, tint = accent)
             Text(title, modifier = Modifier.weight(1f))
-            if (granted) {
-                Text(grantedText, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            } else {
-                TextButton(onClick = onClick) { Text(missingText) }
-            }
+            Text(
+                if (granted) grantedText else missingText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = accent,
+                fontWeight = if (granted) FontWeight.Normal else FontWeight.SemiBold,
+            )
+            Icon(
+                if (granted) Icons.Default.CheckCircle else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

@@ -5,6 +5,7 @@ import android.app.StatusBarManager
 import android.app.NotificationManager
 import android.Manifest
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -284,6 +285,10 @@ internal fun requiresDndAccess(schedules: List<RingerSchedule>, timer: RingerTim
 private enum class AppScreen { HOME, SCHEDULE_EDITOR, TIMER, SETTINGS }
 private enum class NavigationMotion { INSTANT, FORWARD, BACK }
 
+/** AOSP Settings' per-app Do Not Disturb access screen. Not public SDK API — always keep a fallback. */
+private const val ACTION_NOTIFICATION_POLICY_ACCESS_DETAIL_SETTINGS =
+    "android.settings.NOTIFICATION_POLICY_ACCESS_DETAIL_SETTINGS"
+
 private const val BackgroundParallaxFraction = 0.2f
 private const val NavigationSpringDampingRatio = 0.85f
 private const val NavigationSpringStiffness = 550f
@@ -360,7 +365,21 @@ internal fun rememberSystemAccess(): SystemAccess {
                 })
             }
         },
-        requestDnd = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)) },
+        // The public list action drops you into every app on the device with nothing scrolled to or
+        // highlighted, so aim for the per-app detail screen — one toggle, already named Smart Ringer.
+        // That action is not public SDK API, hence the fallback for ROMs that lack the activity.
+        requestDnd = {
+            val detail = Intent(ACTION_NOTIFICATION_POLICY_ACCESS_DETAIL_SETTINGS).apply {
+                data = android.net.Uri.parse("package:${context.packageName}")
+            }
+            try {
+                context.startActivity(detail)
+            } catch (_: ActivityNotFoundException) {
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+            } catch (_: SecurityException) {
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+            }
+        },
         requestNotifications = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
