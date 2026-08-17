@@ -32,6 +32,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".schedule.ActiveNotificationDismissReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".schedule.BootReceiver"
             android:enabled="true"
             android:exported="false">

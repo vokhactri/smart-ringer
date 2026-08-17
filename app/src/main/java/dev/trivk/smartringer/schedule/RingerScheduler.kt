@@ -121,7 +121,7 @@ class RingerScheduler(private val context: Context) {
         }.isSuccess
 
         if (succeeded) {
-            notifications.showActive(selected.name, selected.mode, selected.endsAtMillis)
+            notifications.showActive(selected.id, selected.name, selected.mode, selected.endsAtMillis)
         } else {
             notifications.showPermissionError(selected.name)
         }

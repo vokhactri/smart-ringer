@@ -117,6 +117,29 @@ class ScheduleRepository(context: Context) {
         preferences.edit().putBoolean(SETUP_PROMPT_DISMISSED_KEY, dismissed).apply()
     }
 
+    internal fun loadActiveNotification(): ActiveNotificationState = ActiveNotificationState(
+        postedKey = preferences.getString(ACTIVE_NOTIFICATION_POSTED_KEY, null),
+        dismissedKey = preferences.getString(ACTIVE_NOTIFICATION_DISMISSED_KEY, null),
+    )
+
+    internal fun saveActiveNotificationPosted(key: String) {
+        preferences.edit()
+            .putString(ACTIVE_NOTIFICATION_POSTED_KEY, key)
+            .remove(ACTIVE_NOTIFICATION_DISMISSED_KEY)
+            .commit()
+    }
+
+    internal fun saveActiveNotificationDismissed(key: String) {
+        preferences.edit().putString(ACTIVE_NOTIFICATION_DISMISSED_KEY, key).commit()
+    }
+
+    internal fun clearActiveNotification() {
+        preferences.edit()
+            .remove(ACTIVE_NOTIFICATION_POSTED_KEY)
+            .remove(ACTIVE_NOTIFICATION_DISMISSED_KEY)
+            .commit()
+    }
+
     internal fun loadAppliedState(): AppliedState? {
         val ruleId = preferences.getString(APPLIED_RULE_KEY, null) ?: return null
         return AppliedState(
@@ -190,6 +213,8 @@ class ScheduleRepository(context: Context) {
         private const val APPLIED_RULE_KEY = "applied_rule"
         private const val PREVIOUS_RINGER_MODE_KEY = "previous_ringer_mode"
         private const val PREVIOUS_INTERRUPTION_FILTER_KEY = "previous_interruption_filter"
+        private const val ACTIVE_NOTIFICATION_POSTED_KEY = "active_notification_posted"
+        private const val ACTIVE_NOTIFICATION_DISMISSED_KEY = "active_notification_dismissed"
     }
 }
 
@@ -197,4 +222,14 @@ internal data class AppliedState(
     val ruleId: String,
     val previousRingerMode: Int,
     val previousInterruptionFilter: Int,
+)
+
+/**
+ * [postedKey] is the automation occurrence the ongoing notification was last posted for,
+ * [dismissedKey] the one the user swiped away. Both are compared against the current
+ * occurrence so a reconcile never re-posts a notification the user already dealt with.
+ */
+internal data class ActiveNotificationState(
+    val postedKey: String?,
+    val dismissedKey: String?,
 )
